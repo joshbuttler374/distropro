@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth ─────────────────────────────────────────────────
+
+model User {
+  id             String    @id @default(cuid())
+  name           String
+  email          String    @unique
+  phone          String?
+  passwordHash   String
+  emailVerified  Boolean   @default(false)
+  tokenBalance   Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  otps           Otp[]
+  fbAccounts     FbAccount[]
+  sources        Source[]
+  schedules      Schedule[]
+  jobs           Job[]
+  ledgerEntries  LedgerEntry[]
+  payments       Payment[]
+  events         Event[]
+}
+
+model Otp {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ── Facebook pages ───────────────────────────────────────
+
+model FbAccount {
+  id              String   @id @default(cuid())
+  userId          String
+  fbUserId        String
+  accessToken     String   // encrypted in production
+  tokenExpiresAt  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages FbPage[]
+
+  @@unique([userId, fbUserId])
+}
+
+model FbPage {
+  id            String   @id @default(cuid())
+  fbAccountId   String
+  pageId        String
+  pageName      String
+  accessToken   String   // page-scoped token, encrypted in production
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  fbAccount FbAccount  @relation(fields: [fbAccountId], references: [id], onDelete: Cascade)
+  jobs      Job[]
+  schedules Schedule[]
+
+  @@unique([fbAccountId, pageId])
+}
+
+// ── Content sources ──────────────────────────────────────
+
+enum SourcePlatform {
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE
+  FACEBOOK
+  UPLOAD
+}
+
+model Source {
+  id        String         @id @default(cuid())
+  userId    String
+  platform  SourcePlatform
+  handle    String         // username, page ID, or "upload"
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reels Reel[]
+
+  @@unique([userId, platform, handle])
+}
+
+model Reel {
+  id          String   @id @default(cuid())
+  sourceId    String
+  externalId  String?  // original reel / video ID on the platform
+  title       String?
+  videoUrl    String   // URL in object storage (R2 / S3)
+  thumbnailUrl String?
+  durationSec Int?
+  moderationOk Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  jobs   Job[]
+
+  @@unique([sourceId, externalId])
+}
+
+// ── Scheduling ───────────────────────────────────────────
+
+model Schedule {
+  id        String   @id @default(cuid())
+  userId    String
+  pageId    String
+  sourceId  String?
+  cronExpr  String   // e.g. "0 9,12,18 * * *" (09:00, 12:00, 18:00 daily)
+  timezone  String   @default("Asia/Karachi")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  page FbPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  jobs Job[]
+
+  @@index([isActive])
+}
+
+// ── Jobs (publish queue) ─────────────────────────────────
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model Job {
+  id            String    @id @default(cuid())
+  userId        String
+  scheduleId    String?
+  pageId        String
+  reelId        String
+  status        JobStatus @default(PENDING)
+  tokensCharged Int       @default(0)
+  errorMessage  String?
+  scheduledFor  DateTime
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedule Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  page     FbPage    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  reel     Reel      @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor])
+  @@index([userId, createdAt])
+}
+
+// ── Token ledger ─────────────────────────────────────────
+
+enum LedgerType {
+  TOPUP
+  CHARGE
+  REFUND
+  ADJUSTMENT
+}
+
+model LedgerEntry {
+  id        String     @id @default(cuid())
+  userId    String
+  type      LedgerType
+  amount    Int        // positive = credit, negative = debit
+  balance   Int        // balance after this entry
+  jobId     String?
+  paymentId String?
+  note      String?
+  createdAt DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ── Payments ─────────────────────────────────────────────
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  STRIPE
+  LOCAL_GATEWAY
+}
+
+model Payment {
+  id              String          @id @default(cuid())
+  userId          String
+  provider        PaymentProvider
+  externalId      String?         // Stripe payment intent ID, etc.
+  amountCents     Int             // total in smallest currency unit
+  currency        String          @default("PKR")
+  tokensGranted   Int
+  status          PaymentStatus   @default(PENDING)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([externalId])
+}
+
+// ── Events (analytics) ───────────────────────────────────
+
+model Event {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // e.g. "signup", "login", "topup", "publish_success"
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+}
