@@ -96,6 +96,22 @@ licensed scraping API. Do not add yt-dlp or similar without ensuring you have
 the rights to redistribute the content — scraping third-party content may
 violate platform ToS and copyright law.
 
+## Manual Top-ups (Pakistan / non-Stripe markets)
+
+Stripe doesn't operate in Pakistan, so DistroPro ships a manual top-up flow
+alongside Stripe:
+
+1. **User** picks a token amount on `/billing`, sees the operator's
+   Easypaisa / JazzCash / Binance / bank details (configured via `PAYOUT_*`
+   env vars), pays out-of-band, then submits the transaction reference.
+2. A `Payment` row is created with `provider=LOCAL_GATEWAY` and
+   `status=PENDING`.
+3. **Admin** (an email in `ADMIN_EMAILS`) opens `/admin/payments`, verifies
+   the transaction in their bank/wallet app, and clicks **Approve** —
+   tokens are credited via the same atomic ledger transaction Stripe uses.
+
+The manual UI is hidden automatically when no `PAYOUT_*` env vars are set.
+
 ## Token Ledger
 
 Token mutations go through a single function that:

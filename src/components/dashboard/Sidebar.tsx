@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard,
   Link2,
@@ -10,6 +10,7 @@ import {
   CalendarClock,
   History,
   CreditCard,
+  ShieldCheck,
   Infinity as InfinityIcon,
   LogOut,
 } from "lucide-react";
@@ -24,7 +25,9 @@ const items = [
   { href: "/billing", label: "Billing", icon: CreditCard },
 ];
 
-export function Sidebar() {
+export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
+  // useSession is fine here but server passes isAdmin; we keep the prop primary.
+  useSession();
   const pathname = usePathname();
   return (
     <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
@@ -51,6 +54,18 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {isAdmin ? (
+          <Link
+            href="/admin/payments"
+            className={cn(
+              "mt-2 flex items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary",
+              pathname.startsWith("/admin") && "bg-primary/15",
+            )}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Admin · Payments
+          </Link>
+        ) : null}
       </nav>
       <button
         onClick={() => signOut({ callbackUrl: "/" })}

@@ -115,6 +115,42 @@ Returns `{ url }` — a Stripe Checkout session URL.
 Stripe webhook. Verifies signature, then on `checkout.session.completed`
 records a `Payment` row and credits tokens via the ledger.
 
+## Manual top-ups
+
+### `POST /api/billing/request-topup`
+
+Body: `{ tokens, method: "easypaisa"|"jazzcash"|"binance"|"bank", reference }`
+
+Creates a `Payment` with `provider=LOCAL_GATEWAY`, `status=PENDING`. Tokens are
+**not** credited until an admin approves.
+
+### `GET /api/billing/request-topup`
+
+Returns the current user's payment history (last 50).
+
+### `GET /api/me/payout-info`
+
+Returns operator payout details (Easypaisa/JazzCash/Binance/bank) sourced from
+the `PAYOUT_*` env vars, the operator name (`PAYOUT_NAME`), and the current
+`TOKEN_PRICE_PKR`.
+
+## Admin (allowlist via `ADMIN_EMAILS`)
+
+### `GET /api/admin/payments?status=PENDING|COMPLETED|FAILED`
+
+Lists payments at the given status with full user info embedded.
+
+### `PATCH /api/admin/payments/{id}`
+
+Body: `{ action: "approve"|"reject", note?: string }`
+
+- **approve** → marks `Payment.status=COMPLETED` and credits tokens to the user
+  via `creditTokens()` (atomic ledger transaction).
+- **reject** → marks `Payment.status=FAILED` with the optional note. No tokens
+  credited.
+
+Returns 409 if the payment is not `PENDING`.
+
 ## Cron
 
 ### `GET /api/cron/run-jobs`

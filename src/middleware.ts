@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const PROTECTED_PATHS = ["/dashboard", "/pages", "/sources", "/schedules", "/history", "/billing"];
+const PROTECTED_PATHS = ["/dashboard", "/pages", "/sources", "/schedules", "/history", "/billing", "/admin"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -20,5 +20,13 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/pages/:path*", "/sources/:path*", "/schedules/:path*", "/history/:path*", "/billing/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/pages/:path*",
+    "/sources/:path*",
+    "/schedules/:path*",
+    "/history/:path*",
+    "/billing/:path*",
+    "/admin/:path*",
+  ],
 };
