@@ -16,6 +16,7 @@ model User {
   phone          String?
   passwordHash   String
   emailVerified  Boolean   @default(false)
+  isAdmin        Boolean   @default(false)
   tokenBalance   Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -215,17 +216,23 @@ model Payment {
   id              String          @id @default(cuid())
   userId          String
   provider        PaymentProvider
-  externalId      String?         // Stripe payment intent ID, etc.
+  externalId      String?         // Stripe session ID or local txn reference
+  reference       String?         // user-supplied reference (Easypaisa TID, Binance order ID, etc.)
+  method          String?         // "easypaisa" | "jazzcash" | "binance" | "stripe"
   amountCents     Int             // total in smallest currency unit
   currency        String          @default("PKR")
   tokensGranted   Int
   status          PaymentStatus   @default(PENDING)
+  reviewNote      String?         // admin note on approve/reject
+  reviewedById    String?         // admin user id
+  reviewedAt      DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([externalId])
+  @@index([status, createdAt])
 }
 
 // ── Events (analytics) ───────────────────────────────────

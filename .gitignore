@@ -9,3 +9,4 @@ prisma/*.db
 prisma/migrations/
 dist/
 .vercel/
+.vercel
